@@ -51,7 +51,12 @@ class _DictSAXHandler(object):
                  namespace_separator=':',
                  namespaces=None,
                  force_list=None,
-                 comment_key='#comment'):
+                 comment_key='#comment',
+                 #
+                 # flatten is a callable (path:list[(tag:str, attr:Optional[dict])], tag:string) -> bool
+                 # if it returns true then all content of all subtags will be flattened into a string
+                 #
+                 flatten = None):
         self.path = []
         self.stack = []
         self.data = []
@@ -69,8 +74,11 @@ class _DictSAXHandler(object):
         self.namespace_separator = namespace_separator
         self.namespaces = namespaces
         self.namespace_declarations = OrderedDict()
+        self.flatten = flatten
         self.force_list = force_list
         self.comment_key = comment_key
+
+        self._is_flattening = False
 
     def _build_name(self, full_name):
         if self.namespaces is None:
@@ -102,7 +110,14 @@ class _DictSAXHandler(object):
         if attrs and self.namespace_declarations:
             attrs['xmlns'] = self.namespace_declarations
             self.namespace_declarations = OrderedDict()
-        self.path.append((name, attrs or None))
+
+        if not self._is_flattening:
+            self.path.append((name, attrs or None))
+
+        if self.flatten and self.flatten(self.path, full_name):
+            self._is_flattening = True
+            self._data_flat = ''
+
         if len(self.path) > self.item_depth:
             self.stack.append((self.item, self.data))
             if self.xml_attribs:
@@ -123,6 +138,7 @@ class _DictSAXHandler(object):
 
     def endElement(self, full_name):
         name = self._build_name(full_name)
+
         if len(self.path) == self.item_depth:
             item = self.item
             if item is None:
@@ -132,6 +148,7 @@ class _DictSAXHandler(object):
             should_continue = self.item_callback(self.path, item)
             if not should_continue:
                 raise ParsingInterrupted()
+
         if len(self.stack):
             data = (None if not self.data
                     else self.cdata_separator.join(self.data))
@@ -141,6 +158,7 @@ class _DictSAXHandler(object):
                 data = data.strip() or None
             if data and self.force_cdata and item is None:
                 item = self.dict_constructor()
+
             if item is not None:
                 if data:
                     self.push_data(item, self.cdata_key, data)
@@ -150,9 +168,20 @@ class _DictSAXHandler(object):
         else:
             self.item = None
             self.data = []
-        self.path.pop()
+
+        if not self._is_flattening:
+            self.path.pop()
+
+        if self.flatten and self.flatten(self.path, full_name):
+            self._is_flattening = False
+            self.path.pop()
+
+            self.item = {full_name: self._data_flat}
 
     def characters(self, data):
+        if self._is_flattening:
+            self._data_flat += data.strip() if self.strip_whitespace else data
+
         if not self.data:
             self.data = [data]
         else:
