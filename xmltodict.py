@@ -1,5 +1,13 @@
 #!/usr/bin/env python
-"Makes working with XML feel like you are working with JSON"
+"""
+Makes working with XML feel like you are working with JSON
+
+forked from: https://github.com/martinblech/xmltodict
+
+added 'flatten' feature (see doc and tests)
+
+github repo: https://github.com/Facten/xmltodict
+"""
 
 try:
     from defusedexpat import pyexpat as expat
