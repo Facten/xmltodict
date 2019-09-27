@@ -184,7 +184,10 @@ class _DictSAXHandler(object):
             self._is_flattening = False
             self.path.pop()
 
-            self.item[full_name] = self._data_flat
+            if isinstance(self.item[full_name], list):
+                self.item[full_name][-1] = self._data_flat
+            else:
+                self.item[full_name] = self._data_flat
 
     def characters(self, data):
         if self._is_flattening:
